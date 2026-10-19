@@ -1,0 +1,28 @@
+# Python virtual environments
+.venv/
+.venv-release/
+venv/
+
+# PyCharm
+.idea/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Generated SEC filing data
+data/
+
+# Editor backup files
+*~
