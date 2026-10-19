@@ -26,3 +26,5 @@ data/
 
 # Editor backup files
 *~
+
+.venv-public-test/
