@@ -33,7 +33,7 @@ def filing():
 
 @pytest.fixture
 def fetcher(tmp_path):
-    bus = SimpleNamespace()
+    bus = SimpleNamespace(redis=AsyncMock())
     registry = SimpleNamespace()
 
     edgar = SimpleNamespace(

@@ -69,6 +69,7 @@ class SecFetcher(BaseAgent):
                 accession_number=payload.accession_number,
                 company_name=payload.company_name,
                 filing_type=payload.filing_type,
+                filing_date=payload.filing_date,
                 artifact=artifact,
             ),
         )

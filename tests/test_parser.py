@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -41,7 +42,7 @@ HTML = b"""
 @pytest.fixture
 def parser(tmp_path):
     return SecParser(
-        event_bus=SimpleNamespace(),
+        event_bus=SimpleNamespace(redis=AsyncMock()),
         correlation_registry=SimpleNamespace(),
         artifact_root=tmp_path,
     )
@@ -203,3 +204,41 @@ async def test_rejects_external_file(
         match="outside the artifact root",
     ):
         await parser.handle_event(fetched_event)
+
+
+def test_div_based_filing_extracts_narrative_without_duplicate_text():
+    html = b"""<html><body>
+    <div><div>Business overview <span>and strategy</span>.</div>
+    <div>Revenue increased <ix:nonfraction>25%</ix:nonfraction>.</div></div>
+    <table><tr><td>Revenue</td><td>125</td></tr></table>
+    <div>Risk factors include supply constraints.</div>
+    </body></html>"""
+    doc = SecParser._parse_html(html)
+    assert doc["table_count"] == 1
+    paragraphs = [b["text"] for b in doc["blocks"] if b["type"] == "paragraph"]
+    assert len(paragraphs) == 3
+    assert "Business overview and strategy" in paragraphs[0]
+    assert "Revenue increased 25%" in paragraphs[1]
+    assert paragraphs[2] == "Risk factors include supply constraints."
+    assert doc["text"].count("Business overview") == 1
+    assert [b["type"] for b in doc["blocks"]] == ["paragraph", "paragraph", "table", "paragraph"]
+
+
+def test_nested_div_and_p_do_not_duplicate():
+    html = b"<body><div>Intro <b>text</b><p>Nested paragraph</p>Outro</div></body>"
+    doc = SecParser._parse_html(html)
+    assert [b["text"] for b in doc["blocks"]] == ["Intro text", "Nested paragraph", "Outro"]
+
+
+def test_inline_wrapper_does_not_swallow_table():
+    html = b"<body><div>Before <span><table><tr><td>42</td></tr></table></span> After</div></body>"
+    doc = SecParser._parse_html(html)
+    assert doc["table_count"] == 1
+    assert [b["type"] for b in doc["blocks"]] == ["paragraph", "table", "paragraph"]
+
+
+def test_hidden_xbrl_is_not_narrative():
+    html = b"<html><body><ix:header><ix:hidden>SECRET_CONTEXT</ix:hidden></ix:header><div>Real business narrative</div></body></html>"
+    doc = SecParser._parse_html(html)
+    assert "SECRET_CONTEXT" not in doc["text"]
+    assert "Real business narrative" in doc["text"]
