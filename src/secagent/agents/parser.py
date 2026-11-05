@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 from secagent.parsing.xbrl import extract_inline_xbrl
 from secagent.parsing.xbrl_normalize import normalize_xbrl
 
@@ -102,6 +102,7 @@ class SecParser(BaseAgent):
                 "accession_number": payload.accession_number,
                 "company_name": payload.company_name,
                 "filing_type": payload.filing_type,
+                "filing_date": payload.filing_date,
                 "artifact_id": payload.artifact.artifact_id,
                 "artifact_uri": payload.artifact.uri,
                 "checksum": source_checksum,
@@ -176,90 +177,87 @@ class SecParser(BaseAgent):
     def _parse_html(cls, raw: bytes) -> dict:
         soup = BeautifulSoup(raw, "html.parser")
 
-        for tag in soup(
-            ["script", "style", "noscript", "iframe"]
-        ):
-            tag.decompose()
+        # Inline XBRL metadata is not human-readable filing narrative.
+        for tag in list(soup.find_all(True)):
+            if tag.name in {"script", "style", "noscript", "iframe",
+                            "ix:header", "ix:hidden", "ix:resources",
+                            "xbrli:context", "xbrli:unit"}:
+                tag.decompose()
 
         root = soup.body or soup
-
         blocks = []
         text_parts = []
+        headings = {"h1", "h2", "h3", "h4", "h5", "h6"}
+        boundaries = headings | {"div", "section", "article", "main",
+                                 "header", "footer", "p", "li", "ul",
+                                 "ol", "table", "blockquote", "pre",
+                                 "br", "hr"}
 
-        block_tags = {
-            "h1", "h2", "h3", "h4", "h5", "h6",
-            "p", "li", "table",
-        }
+        def emit(value, kind="paragraph", level=None):
+            value = cls._normalize_text(value)
+            if not value:
+                return
+            block = {"type": kind, "text": value}
+            if level is not None:
+                block["level"] = level
+            blocks.append(block)
+            text_parts.append(value)
 
-        def visit(node):
+        def visit(node, kind="paragraph", level=None):
+            if isinstance(node, NavigableString):
+                emit(str(node), kind, level)
+                return
             if not isinstance(node, Tag):
                 return
-
             if node.name == "table":
                 table = cls._extract_table(node)
                 if table["rows"]:
                     blocks.append(table)
                     text_parts.append(table["text"])
                 return
-
-            if node.name in block_tags:
-                # If this block contains another recognized block,
-                # recurse to avoid duplicating nested content.
-                nested = any(
-                    isinstance(child, Tag)
-                    and child.name in block_tags
-                    for child in node.children
-                )
-
-                if nested:
-                    for child in node.children:
-                        visit(child)
-                    return
-
-                text = cls._normalize_text(
-                    node.get_text(" ", strip=True)
-                )
-
-                if text:
-                    kind = (
-                        "heading"
-                        if node.name.startswith("h")
-                        else "list_item"
-                        if node.name == "li"
-                        else "paragraph"
-                    )
-
-                    block = {
-                        "type": kind,
-                        "text": text,
-                    }
-
-                    if kind == "heading":
-                        block["level"] = int(node.name[1])
-
-                    blocks.append(block)
-                    text_parts.append(text)
-
+            if node.name in {"br", "hr"}:
                 return
 
+            if node.name in headings:
+                kind, level = "heading", int(node.name[1])
+            elif node.name == "li":
+                kind, level = "list_item", None
+            elif node.name in boundaries:
+                kind, level = "paragraph", None
+
+            # Traverse *all* wrappers, including inline and ix tags. An inline
+            # wrapper can contain a table in real SEC HTML; get_text() would
+            # otherwise swallow it. Flush before nested structural blocks.
+            run = []
+
+            def flush():
+                if run:
+                    emit(" ".join(run), kind, level)
+                    run.clear()
+
+            def append_inline(child):
+                if isinstance(child, NavigableString):
+                    run.append(str(child))
+                elif isinstance(child, Tag):
+                    if child.name in boundaries:
+                        flush()
+                        visit(child, kind, level)
+                    else:
+                        for descendant in child.children:
+                            append_inline(descendant)
+
             for child in node.children:
-                visit(child)
+                append_inline(child)
+            flush()
 
         visit(root)
-
         return {
-            "title": (
-                cls._normalize_text(soup.title.get_text())
-                if soup.title
-                else None
-            ),
+            "title": (cls._normalize_text(soup.title.get_text())
+                      if soup.title else None),
             "blocks": blocks,
             "text": "\n\n".join(text_parts),
             "block_count": len(blocks),
-            "table_count": sum(
-                block["type"] == "table"
-                for block in blocks
-            ),
+            "table_count": sum(b["type"] == "table" for b in blocks),
         }
 
     @classmethod
