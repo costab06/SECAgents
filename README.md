@@ -2,7 +2,7 @@
 
 **An event-driven, multi-agent SEC EDGAR ingestion pipeline built on OpenAgentFabric.**
 
-**Version:** 0.1.0  
+**Version:** 0.2.0  
 **Python:** 3.12  
 **License:** Apache 2.0
 
@@ -10,7 +10,7 @@ SECAgents discovers SEC EDGAR filings, downloads their source documents, and ext
 
 The application is built on [OpenAgentFabric](https://github.com/costab06/OpenAgentFabric), which provides the shared agent runtime, event bus, correlation tracking, and consumer-group infrastructure.
 
-**SECAgents v0.1.0 is an engineering demonstration**, not an investment-recommendation service, a production financial-data platform, or a guarantee of comprehensive financial-statement extraction.
+**SECAgents v0.2.0 is an engineering demonstration**, not an investment-recommendation service, a production financial-data platform, or a guarantee of comprehensive financial-statement extraction.
 
 ## Architecture
 
@@ -74,7 +74,7 @@ After processing, both the Fetcher and Parser Redis consumer groups reported:
 - **Pending messages:** 0
 - **Consumer lag:** 0
 
-The SECAgents test suite passed **49 tests**.
+The SECAgents v0.2.0 test suite reportedly passed **62 tests** in release validation. This count should be confirmed against the published v0.2.0 commit.
 
 In a separate Apple financial-summary validation, **18 of 18 selected facts** matched SEC Company Facts for the tested filing.
 
@@ -99,7 +99,7 @@ You can use a different Redis endpoint by setting `REDIS_URL` consistently for a
 
 ## Installation
 
-SECAgents depends on OpenAgentFabric v0.1.0. The framework is maintained in a separate repository.
+SECAgents v0.2.0 is intended to use OpenAgentFabric v0.2.1; verify the declared dependency in `pyproject.toml` before installation. The framework is maintained in a separate repository.
 
 The following procedure installs OpenAgentFabric from its versioned GitHub release and then installs SECAgents.
 
@@ -123,10 +123,10 @@ python -m pip install --upgrade pip
 
 ```bash
 python -m pip install \
-  "openagentfabric @ git+https://github.com/costab06/OpenAgentFabric.git@v0.1.0"
+  "openagentfabric @ git+https://github.com/costab06/OpenAgentFabric.git@v0.2.1"
 ```
 
-This installs the framework from its `v0.1.0` Git tag. A sibling checkout of the framework is not required.
+This installs the framework from its `v0.2.1` Git tag. A sibling checkout of the framework is not required.
 
 ### 4. Install SECAgents
 
@@ -143,7 +143,7 @@ python -m pip check
 python -m pytest -q
 ```
 
-The release candidate was also tested in a fresh Python 3.12 environment with OpenAgentFabric installed directly from the GitHub tag. The tests passed.
+For a clean-environment release check, install the tagged OpenAgentFabric dependency and run `python -m pip check` followed by `python -m pytest -q`.
 
 **Important:** The installation instructions assume the GitHub repositories are accessible over HTTPS. If the repositories are private, appropriate GitHub access is required.
 
@@ -372,7 +372,21 @@ These utilities support targeted comparisons of extracted information against SE
 
 They are separate from the normal three-agent ingestion pipeline.
 
-The reported Apple validation matched 18 of 18 selected facts for the tested filing. That is a bounded validation result, not a general accuracy claim for all issuers or filings.
+The previously reported Apple validation matched 18 of 18 selected facts for the tested filing. This is a bounded validation result, not a general accuracy claim for all issuers or filings.
+
+### NVIDIA narrative extraction regression
+
+The v0.2.0 parser revision addresses filings whose narrative content appears in nested `div` structures rather than only conventional paragraph elements. The parser traverses nested document content while preserving table blocks and excluding selected inline XBRL metadata.
+
+Reported post-fix validation:
+
+| Filing | Total blocks | Paragraphs | Tables | Narrative recovery | Table preservation |
+|---|---:|---:|---:|---|---|
+| `nvda-20260125.htm` | 1,200 | 1,136 | 64 | PASS | PASS |
+| `nvda-20260726.htm` | 562 | 510 | 52 | PASS | PASS |
+
+These are targeted regression results for two filings, not a guarantee of comprehensive narrative recovery across every issuer, filing type, or HTML layout.
+
 
 ## Testing
 
@@ -388,9 +402,9 @@ Check installed dependency consistency with:
 python -m pip check
 ```
 
-OpenAgentFabric v0.1.0 separately passed **67 tests** in its release environment.
+OpenAgentFabric v0.2.1 reportedly passed **86 tests** in its release environment; verify this count against the release validation.
 
-SECAgents passed **49 tests** in its release validation, including a subsequent clean-environment test using the tagged OpenAgentFabric dependency.
+SECAgents v0.2.0 reportedly passed **62 tests** in release validation. Run the test suite against the tagged OpenAgentFabric dependency to confirm the published release.
 
 Automated tests and a successful demonstration are complementary: tests verify defined behaviors, while an end-to-end run verifies interaction among the agents, Redis, SEC EDGAR, and the filesystem.
 
@@ -426,9 +440,17 @@ The `scripts/` directory contains the reset and validation utilities.
 
 OpenAgentFabric is a separate Python package and repository, not a copied component of SECAgents.
 
+## Changes in v0.2.0
+
+- Improved extraction of narrative text from nested, `div`-based filing layouts.
+- Preserved table blocks during recursive narrative recovery.
+- Added or expanded regression validation using two NVIDIA filings.
+- Reported expanded test suite: 62 passing tests (verify against the release commit).
+- Intended compatibility with OpenAgentFabric v0.2.1 (verify dependency declaration).
+
 ## Scope and limitations
 
-Version 0.1.0 establishes a working multi-agent SEC filing ingestion demonstration with structured artifact generation.
+Version 0.2.0 extends the multi-agent SEC filing ingestion demonstration with improved extraction of narrative content from nested, `div`-based HTML structures and regression validation against NVIDIA filings.
 
 It does not claim:
 
@@ -445,7 +467,7 @@ Redis Streams and the OpenAgentFabric runtime provide infrastructure for event d
 
 **[OpenAgentFabric](https://github.com/costab06/OpenAgentFabric)**
 
-SECAgents uses OpenAgentFabric v0.1.0 as its shared agent framework.
+SECAgents v0.2.0 is intended to use OpenAgentFabric v0.2.1 as its shared agent framework. Confirm the exact dependency in `pyproject.toml`.
 
 The framework and application are separately versioned so they can evolve independently.
 
